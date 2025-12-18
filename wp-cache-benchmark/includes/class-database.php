@@ -32,6 +32,12 @@ class WP_Cache_Benchmark_Database {
             name varchar(255) NOT NULL,
             status varchar(20) DEFAULT 'pending',
             iterations int DEFAULT 10,
+            current_iteration int DEFAULT 0,
+            total_iterations int DEFAULT 10,
+            current_phase varchar(50) DEFAULT 'init',
+            stop_requested tinyint(1) DEFAULT 0,
+            last_heartbeat datetime,
+            job_config longtext,
             avg_response_time float,
             min_response_time float,
             max_response_time float,
@@ -73,10 +79,25 @@ class WP_Cache_Benchmark_Database {
             KEY iteration (iteration)
         ) $charset_collate;";
         
+        $logs_table = $wpdb->prefix . 'cache_benchmark_logs';
+        $sql_logs = "CREATE TABLE IF NOT EXISTS $logs_table (
+            id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+            result_id bigint(20) unsigned NOT NULL,
+            log_type varchar(20) DEFAULT 'info',
+            message text NOT NULL,
+            data longtext,
+            created_at datetime DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (id),
+            KEY result_id (result_id),
+            KEY log_type (log_type),
+            KEY created_at (created_at)
+        ) $charset_collate;";
+        
         require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
         dbDelta($sql_profiles);
         dbDelta($sql_results);
         dbDelta($sql_metrics);
+        dbDelta($sql_logs);
     }
     
     public static function get_profiles() {
@@ -193,9 +214,14 @@ class WP_Cache_Benchmark_Database {
                 'name' => $data['name'],
                 'status' => isset($data['status']) ? $data['status'] : 'pending',
                 'iterations' => isset($data['iterations']) ? $data['iterations'] : 10,
-                'started_at' => current_time('mysql')
+                'total_iterations' => isset($data['total_iterations']) ? $data['total_iterations'] : 10,
+                'current_iteration' => 0,
+                'current_phase' => isset($data['current_phase']) ? $data['current_phase'] : 'init',
+                'job_config' => isset($data['job_config']) ? maybe_serialize($data['job_config']) : null,
+                'started_at' => current_time('mysql'),
+                'last_heartbeat' => current_time('mysql')
             ),
-            array('%d', '%s', '%s', '%s', '%d', '%s')
+            array('%d', '%s', '%s', '%s', '%d', '%d', '%d', '%s', '%s', '%s', '%s')
         );
         
         return $wpdb->insert_id;
@@ -209,7 +235,9 @@ class WP_Cache_Benchmark_Database {
         $format = array();
         
         $allowed_fields = array(
-            'status', 'avg_response_time', 'min_response_time', 'max_response_time',
+            'status', 'current_iteration', 'total_iterations', 'current_phase', 
+            'stop_requested', 'last_heartbeat', 'job_config',
+            'avg_response_time', 'min_response_time', 'max_response_time',
             'avg_memory_usage', 'peak_memory_usage', 'avg_db_queries', 'total_db_queries',
             'cache_hits', 'cache_misses', 'cache_hit_rate', 'avg_cpu_usage', 'avg_disk_io',
             'raw_data', 'completed_at'
@@ -220,7 +248,7 @@ class WP_Cache_Benchmark_Database {
                 $update_data[$field] = $data[$field];
                 if (in_array($field, array('avg_response_time', 'min_response_time', 'max_response_time', 'cache_hit_rate', 'avg_cpu_usage', 'avg_disk_io'))) {
                     $format[] = '%f';
-                } elseif (in_array($field, array('avg_memory_usage', 'peak_memory_usage', 'cache_hits', 'cache_misses', 'avg_db_queries', 'total_db_queries'))) {
+                } elseif (in_array($field, array('avg_memory_usage', 'peak_memory_usage', 'cache_hits', 'cache_misses', 'avg_db_queries', 'total_db_queries', 'current_iteration', 'total_iterations', 'stop_requested'))) {
                     $format[] = '%d';
                 } else {
                     $format[] = '%s';
@@ -269,5 +297,91 @@ class WP_Cache_Benchmark_Database {
         global $wpdb;
         $table = $wpdb->prefix . 'cache_benchmark_metrics';
         return $wpdb->get_results($wpdb->prepare("SELECT * FROM $table WHERE result_id = %d ORDER BY iteration ASC", $result_id));
+    }
+    
+    public static function save_log($result_id, $type, $message, $data = null) {
+        global $wpdb;
+        $table = $wpdb->prefix . 'cache_benchmark_logs';
+        
+        return $wpdb->insert(
+            $table,
+            array(
+                'result_id' => $result_id,
+                'log_type' => $type,
+                'message' => $message,
+                'data' => $data ? maybe_serialize($data) : null,
+                'created_at' => current_time('mysql')
+            ),
+            array('%d', '%s', '%s', '%s', '%s')
+        );
+    }
+    
+    public static function get_logs_since($result_id, $since_id = 0) {
+        global $wpdb;
+        $table = $wpdb->prefix . 'cache_benchmark_logs';
+        return $wpdb->get_results($wpdb->prepare(
+            "SELECT * FROM $table WHERE result_id = %d AND id > %d ORDER BY id ASC LIMIT 100",
+            $result_id,
+            $since_id
+        ));
+    }
+    
+    public static function get_all_logs($result_id) {
+        global $wpdb;
+        $table = $wpdb->prefix . 'cache_benchmark_logs';
+        return $wpdb->get_results($wpdb->prepare(
+            "SELECT * FROM $table WHERE result_id = %d ORDER BY id ASC",
+            $result_id
+        ));
+    }
+    
+    public static function delete_logs($result_id) {
+        global $wpdb;
+        $table = $wpdb->prefix . 'cache_benchmark_logs';
+        return $wpdb->delete($table, array('result_id' => $result_id), array('%d'));
+    }
+    
+    public static function update_heartbeat($result_id) {
+        global $wpdb;
+        $table = $wpdb->prefix . 'cache_benchmark_results';
+        return $wpdb->update(
+            $table,
+            array('last_heartbeat' => current_time('mysql')),
+            array('id' => $result_id),
+            array('%s'),
+            array('%d')
+        );
+    }
+    
+    public static function request_stop($result_id) {
+        global $wpdb;
+        $table = $wpdb->prefix . 'cache_benchmark_results';
+        return $wpdb->update(
+            $table,
+            array('stop_requested' => 1),
+            array('id' => $result_id),
+            array('%d'),
+            array('%d')
+        );
+    }
+    
+    public static function is_stop_requested($result_id) {
+        global $wpdb;
+        $table = $wpdb->prefix . 'cache_benchmark_results';
+        $result = $wpdb->get_var($wpdb->prepare(
+            "SELECT stop_requested FROM $table WHERE id = %d",
+            $result_id
+        ));
+        return intval($result) === 1;
+    }
+    
+    public static function get_metrics_since($result_id, $since_iteration = 0) {
+        global $wpdb;
+        $table = $wpdb->prefix . 'cache_benchmark_metrics';
+        return $wpdb->get_results($wpdb->prepare(
+            "SELECT * FROM $table WHERE result_id = %d AND iteration > %d ORDER BY iteration ASC",
+            $result_id,
+            $since_iteration
+        ));
     }
 }
