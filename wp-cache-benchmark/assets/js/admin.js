@@ -151,7 +151,10 @@
                     profile_id: $('#profile-select').val(),
                     duration: duration,
                     name: $('#benchmark-name').val(),
-                    create_posts: $('input[name="create_posts"]').is(':checked') ? '1' : '0'
+                    create_posts: $('input[name="create_posts"]').is(':checked') ? '1' : '0',
+                    read_api: $('input[name="read_api"]').is(':checked') ? '1' : '0',
+                    reload_options: $('input[name="reload_options"]').is(':checked') ? '1' : '0',
+                    simulate_cron: $('input[name="simulate_cron"]').is(':checked') ? '1' : '0'
                 },
                 timeout: 700000,
                 success: function(response) {

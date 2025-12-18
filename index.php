@@ -1010,8 +1010,12 @@ $stats = getServerStats();
                         </div>
                         <div class="form-row">
                             <label>Test Components</label>
+                            <p class="description" style="font-size: 12px; color: #666; margin-bottom: 10px;">Select which tests to run. Each test scales based on the selected duration.</p>
                             <div class="checkbox-group">
-                                <label><input type="checkbox" checked> Create test posts (stress test)</label>
+                                <label><input type="checkbox" name="create_posts" checked> Create posts with metadata</label>
+                                <label><input type="checkbox" name="read_api" checked> Read posts via API</label>
+                                <label><input type="checkbox" name="reload_options" checked> Reload options with cache flush</label>
+                                <label><input type="checkbox" name="simulate_cron" checked> Simulate cron (1MB file writes)</label>
                             </div>
                         </div>
                         <div style="display: flex; gap: 10px;">
