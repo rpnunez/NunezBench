@@ -53,20 +53,17 @@ class WP_Cache_Benchmark {
     }
     
     private function init_hooks() {
-        register_activation_hook(__FILE__, array($this, 'activate'));
-        register_deactivation_hook(__FILE__, array($this, 'deactivate'));
-        
         add_action('admin_menu', array($this, 'add_admin_menu'));
         add_action('admin_enqueue_scripts', array($this, 'enqueue_admin_assets'));
         add_action('rest_api_init', array($this, 'register_rest_routes'));
     }
     
-    public function activate() {
+    public static function activate() {
         WP_Cache_Benchmark_Database::create_tables();
         flush_rewrite_rules();
     }
     
-    public function deactivate() {
+    public static function deactivate() {
         flush_rewrite_rules();
     }
     
@@ -207,5 +204,8 @@ class WP_Cache_Benchmark {
 function wp_cache_benchmark() {
     return WP_Cache_Benchmark::get_instance();
 }
+
+register_activation_hook(__FILE__, array('WP_Cache_Benchmark', 'activate'));
+register_deactivation_hook(__FILE__, array('WP_Cache_Benchmark', 'deactivate'));
 
 add_action('plugins_loaded', 'wp_cache_benchmark');
