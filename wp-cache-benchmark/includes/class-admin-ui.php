@@ -305,10 +305,27 @@ class WP_Cache_Benchmark_Admin_UI {
                         
                         <div class="wcb-form-row">
                             <label><?php echo esc_html__('Test Components', 'wp-cache-benchmark'); ?></label>
+                            <p class="description"><?php echo esc_html__('Select which tests to run. Each test scales based on the selected duration.', 'wp-cache-benchmark'); ?></p>
                             <div class="wcb-checkbox-group">
                                 <label>
                                     <input type="checkbox" name="create_posts" value="1" checked>
-                                    <?php echo esc_html__('Create test posts (stress test)', 'wp-cache-benchmark'); ?>
+                                    <?php echo esc_html__('Create posts with metadata', 'wp-cache-benchmark'); ?>
+                                    <span class="wcb-test-scale" data-test="posts"></span>
+                                </label>
+                                <label>
+                                    <input type="checkbox" name="read_api" value="1" checked>
+                                    <?php echo esc_html__('Read posts via API', 'wp-cache-benchmark'); ?>
+                                    <span class="wcb-test-scale" data-test="api"></span>
+                                </label>
+                                <label>
+                                    <input type="checkbox" name="reload_options" value="1" checked>
+                                    <?php echo esc_html__('Reload options with cache flush', 'wp-cache-benchmark'); ?>
+                                    <span class="wcb-test-scale" data-test="options"></span>
+                                </label>
+                                <label>
+                                    <input type="checkbox" name="simulate_cron" value="1" checked>
+                                    <?php echo esc_html__('Simulate cron (1MB file writes)', 'wp-cache-benchmark'); ?>
+                                    <span class="wcb-test-scale" data-test="cron"></span>
                                 </label>
                             </div>
                         </div>
