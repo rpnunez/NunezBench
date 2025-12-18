@@ -109,6 +109,25 @@ class WP_Cache_Benchmark_Ajax_Handler {
         $result = WP_Cache_Benchmark_Database::get_result($benchmark_result['result_id']);
         $metrics = WP_Cache_Benchmark_Database::get_metrics($benchmark_result['result_id']);
         
+        // Cast numeric fields to proper types for JavaScript
+        if ($result) {
+            $result->id = intval($result->id);
+            $result->profile_id = intval($result->profile_id);
+            $result->iterations = intval($result->iterations);
+            $result->avg_response_time = floatval($result->avg_response_time);
+            $result->min_response_time = floatval($result->min_response_time);
+            $result->max_response_time = floatval($result->max_response_time);
+            $result->avg_memory_usage = intval($result->avg_memory_usage);
+            $result->peak_memory_usage = intval($result->peak_memory_usage);
+            $result->avg_db_queries = intval($result->avg_db_queries);
+            $result->total_db_queries = intval($result->total_db_queries);
+            $result->cache_hits = intval($result->cache_hits);
+            $result->cache_misses = intval($result->cache_misses);
+            $result->cache_hit_rate = floatval($result->cache_hit_rate);
+            $result->avg_cpu_usage = floatval($result->avg_cpu_usage);
+            $result->avg_disk_io = floatval($result->avg_disk_io);
+        }
+        
         wp_send_json_success(array(
             'message' => __('Benchmark completed successfully.', 'wp-cache-benchmark'),
             'result_id' => $benchmark_result['result_id'],
@@ -146,6 +165,25 @@ class WP_Cache_Benchmark_Ajax_Handler {
         $result_id = $stress_tester->run($profile_id > 0 ? $profile_id : null, $options);
         
         $result = WP_Cache_Benchmark_Database::get_result($result_id);
+        
+        // Cast numeric fields to proper types for JavaScript
+        if ($result) {
+            $result->id = intval($result->id);
+            $result->profile_id = intval($result->profile_id);
+            $result->iterations = intval($result->iterations);
+            $result->avg_response_time = floatval($result->avg_response_time);
+            $result->min_response_time = floatval($result->min_response_time);
+            $result->max_response_time = floatval($result->max_response_time);
+            $result->avg_memory_usage = intval($result->avg_memory_usage);
+            $result->peak_memory_usage = intval($result->peak_memory_usage);
+            $result->avg_db_queries = intval($result->avg_db_queries);
+            $result->total_db_queries = intval($result->total_db_queries);
+            $result->cache_hits = intval($result->cache_hits);
+            $result->cache_misses = intval($result->cache_misses);
+            $result->cache_hit_rate = floatval($result->cache_hit_rate);
+            $result->avg_cpu_usage = floatval($result->avg_cpu_usage);
+            $result->avg_disk_io = floatval($result->avg_disk_io);
+        }
         
         wp_send_json_success(array(
             'message' => __('Stress test completed successfully.', 'wp-cache-benchmark'),

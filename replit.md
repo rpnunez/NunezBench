@@ -119,3 +119,5 @@ Run `php -S 0.0.0.0:5000` to view the standalone demo interface that showcases a
 - 2024-12-18: Added multi-test selection to Run Benchmark page (matching Stress Test options)
 - 2024-12-18: Implemented duration-based test scaling for all test types
 - 2024-12-18: Added API read test, option reload test, and cron simulation test methods
+- 2024-12-18: Fixed plugin activation to create database tables on install
+- 2024-12-18: Fixed numeric field casting in AJAX responses for JavaScript compatibility
