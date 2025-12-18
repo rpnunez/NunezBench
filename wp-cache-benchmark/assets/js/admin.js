@@ -4,6 +4,11 @@
     var WCB = {
         charts: {},
         refreshInterval: null,
+        pollInterval: null,
+        currentJobId: null,
+        lastLogId: 0,
+        lastIteration: 0,
+        benchmarkStartTime: null,
         
         init: function() {
             this.bindEvents();
@@ -15,6 +20,7 @@
             $('#wcb-profile-form').on('submit', this.handleProfileSubmit.bind(this));
             $('.wcb-delete-profile').on('click', this.handleProfileDelete.bind(this));
             $('#wcb-benchmark-form').on('submit', this.handleBenchmarkSubmit.bind(this));
+            $('#stop-benchmark').on('click', this.handleStopBenchmark.bind(this));
             $('#wcb-stress-form').on('submit', this.handleStressSubmit.bind(this));
             $('#wcb-compare-form').on('submit', this.handleCompareSubmit.bind(this));
             $('.wcb-delete-result').on('click', this.handleResultDelete.bind(this));
@@ -119,17 +125,14 @@
         handleBenchmarkSubmit: function(e) {
             e.preventDefault();
             
-            var $form = $(e.currentTarget);
             var $button = $('#start-benchmark');
             var $stopButton = $('#stop-benchmark');
             var $config = $('.wcb-benchmark-config');
             var $progress = $('.wcb-benchmark-progress');
             var $log = $('.wcb-benchmark-log');
-            var $results = $('.wcb-benchmark-results');
-            var $report = $('.wcb-benchmark-report');
             
             $button.prop('disabled', true).hide();
-            $stopButton.show();
+            $stopButton.show().prop('disabled', false);
             $config.find('input, select').prop('disabled', true);
             $progress.show();
             $log.show();
@@ -138,7 +141,9 @@
             var iterations = this.getDurationIterations(duration);
             this.initLiveChart(iterations);
             this.clearLog();
-            this.addLogEntry('Benchmark started with duration: ' + duration, 'info');
+            this.benchmarkStartTime = Date.now();
+            this.lastLogId = 0;
+            this.lastIteration = 0;
             
             var self = this;
             
@@ -146,7 +151,7 @@
                 url: wpCacheBenchmark.ajaxUrl,
                 type: 'POST',
                 data: {
-                    action: 'wcb_run_benchmark',
+                    action: 'wcb_start_benchmark',
                     nonce: wpCacheBenchmark.nonce,
                     profile_id: $('#profile-select').val(),
                     duration: duration,
@@ -156,32 +161,243 @@
                     reload_options: $('input[name="reload_options"]').is(':checked') ? '1' : '0',
                     simulate_cron: $('input[name="simulate_cron"]').is(':checked') ? '1' : '0'
                 },
-                timeout: 700000,
                 success: function(response) {
                     if (response.success) {
-                        WCB.displayBenchmarkResults(response.data, $results);
-                        WCB.displayLogs(response.data.logs);
-                        WCB.displayReport(response.data.report, $report);
-                        $('#progress-text').text(wpCacheBenchmark.strings.benchmarkComplete);
-                        $('#benchmark-progress').css('width', '100%');
-                        $('#progress-percent').text('100%');
-                        self.addLogEntry('Benchmark completed successfully!', 'success');
+                        self.currentJobId = response.data.job_id;
+                        self.addLogEntry('Benchmark started (Job #' + response.data.job_id + ')', 'info');
+                        self.startPolling();
                     } else {
                         alert(response.data.message);
-                        self.addLogEntry('Benchmark failed: ' + response.data.message, 'error');
+                        self.addLogEntry('Failed to start benchmark: ' + response.data.message, 'error');
+                        self.resetBenchmarkUI();
                     }
-                    $button.prop('disabled', false).show();
-                    $stopButton.hide();
-                    $config.find('input, select').prop('disabled', false);
                 },
                 error: function() {
                     alert(wpCacheBenchmark.strings.error);
-                    self.addLogEntry('Benchmark failed due to an error', 'error');
-                    $button.prop('disabled', false).show();
-                    $stopButton.hide();
-                    $config.find('input, select').prop('disabled', false);
+                    self.addLogEntry('Failed to start benchmark', 'error');
+                    self.resetBenchmarkUI();
                 }
             });
+        },
+        
+        handleStopBenchmark: function(e) {
+            e.preventDefault();
+            
+            var $stopButton = $('#stop-benchmark');
+            $stopButton.prop('disabled', true).text('Stopping...');
+            
+            var self = this;
+            
+            $.ajax({
+                url: wpCacheBenchmark.ajaxUrl,
+                type: 'POST',
+                data: {
+                    action: 'wcb_stop_benchmark',
+                    nonce: wpCacheBenchmark.nonce,
+                    job_id: this.currentJobId
+                },
+                success: function(response) {
+                    self.addLogEntry('Stop requested...', 'warning');
+                },
+                error: function() {
+                    self.addLogEntry('Failed to stop benchmark', 'error');
+                    $stopButton.prop('disabled', false).text('Stop');
+                }
+            });
+        },
+        
+        startPolling: function() {
+            var self = this;
+            
+            if (this.pollInterval) {
+                clearInterval(this.pollInterval);
+            }
+            
+            this.pollInterval = setInterval(function() {
+                self.pollBenchmark();
+            }, 1500);
+            
+            this.pollBenchmark();
+        },
+        
+        stopPolling: function() {
+            if (this.pollInterval) {
+                clearInterval(this.pollInterval);
+                this.pollInterval = null;
+            }
+        },
+        
+        pollBenchmark: function() {
+            var self = this;
+            
+            $.ajax({
+                url: wpCacheBenchmark.ajaxUrl,
+                type: 'POST',
+                data: {
+                    action: 'wcb_poll_benchmark',
+                    nonce: wpCacheBenchmark.nonce,
+                    job_id: this.currentJobId,
+                    last_log_id: this.lastLogId,
+                    last_iteration: this.lastIteration
+                },
+                success: function(response) {
+                    if (response.success) {
+                        var data = response.data;
+                        
+                        if (data.logs && data.logs.length > 0) {
+                            self.appendLogs(data.logs);
+                            self.lastLogId = data.last_log_id;
+                        }
+                        
+                        if (data.metrics && data.metrics.length > 0) {
+                            self.updateLiveChart(data.metrics);
+                            self.lastIteration = data.last_iteration;
+                        }
+                        
+                        var progress = data.progress || 0;
+                        $('#benchmark-progress').css('width', progress + '%');
+                        $('#progress-percent').text(progress.toFixed(1) + '%');
+                        $('#progress-text').text(data.current_phase || 'Running...');
+                        
+                        if (data.status === 'completed' || data.status === 'stopped' || data.status === 'failed') {
+                            self.stopPolling();
+                            self.onBenchmarkComplete(data);
+                        }
+                    } else {
+                        self.addLogEntry('Poll error: ' + response.data.message, 'error');
+                    }
+                },
+                error: function() {
+                    self.addLogEntry('Connection error during polling', 'warning');
+                }
+            });
+        },
+        
+        appendLogs: function(logs) {
+            var $log = $('#benchmark-log');
+            var self = this;
+            
+            logs.forEach(function(log) {
+                var elapsed = ((new Date(log.timestamp).getTime() - self.benchmarkStartTime) / 1000);
+                if (elapsed < 0) elapsed = 0;
+                var timeStr = elapsed.toFixed(1) + 's';
+                
+                var html = '<div class="wcb-log-entry wcb-log-' + log.type + '">' +
+                           '<span class="wcb-log-time">' + timeStr + '</span>' +
+                           '<span class="wcb-log-message">' + self.escapeHtml(log.message) + '</span>' +
+                           '</div>';
+                $log.append(html);
+            });
+            
+            $log.scrollTop($log[0].scrollHeight);
+            $('#log-count').text($log.find('.wcb-log-entry').length);
+        },
+        
+        updateLiveChart: function(metrics) {
+            if (!this.charts.live) return;
+            
+            var self = this;
+            
+            metrics.forEach(function(metric) {
+                self.charts.live.data.labels.push(metric.iteration);
+                self.charts.live.data.datasets[0].data.push(metric.response_time);
+            });
+            
+            this.charts.live.update('none');
+        },
+        
+        onBenchmarkComplete: function(data) {
+            var $results = $('.wcb-benchmark-results');
+            var $report = $('.wcb-benchmark-report');
+            
+            if (data.result) {
+                this.displayFinalResults(data.result, data.all_metrics, $results);
+            }
+            
+            if (data.report) {
+                this.displaySimpleReport(data.report, $report);
+            }
+            
+            $('#progress-text').text(data.status === 'stopped' ? 'Benchmark stopped' : 'Benchmark complete!');
+            $('#benchmark-progress').css('width', '100%');
+            $('#progress-percent').text('100%');
+            
+            this.addLogEntry('Benchmark ' + data.status + '!', data.status === 'completed' ? 'success' : 'warning');
+            this.resetBenchmarkUI();
+        },
+        
+        displayFinalResults: function(result, metrics, $container) {
+            var html = '<div class="wcb-metrics-grid">';
+            html += this.createMetricCard('Average Response', (result.avg_response_time || 0).toFixed(2) + ' ms');
+            html += this.createMetricCard('Min Response', (result.min_response_time || 0).toFixed(2) + ' ms');
+            html += this.createMetricCard('Max Response', (result.max_response_time || 0).toFixed(2) + ' ms');
+            html += this.createMetricCard('Avg Memory', this.formatBytes(result.avg_memory_usage || 0));
+            html += this.createMetricCard('Peak Memory', this.formatBytes(result.peak_memory_usage || 0));
+            html += this.createMetricCard('Cache Hit Rate', (result.cache_hit_rate || 0).toFixed(1) + '%');
+            html += '</div>';
+            
+            html += '<div class="wcb-form-actions">';
+            html += '<a href="' + window.location.origin + window.location.pathname + '?page=wp-cache-benchmark-results&id=' + result.id + '" class="button button-primary">View Full Results</a>';
+            html += '</div>';
+            
+            $container.find('#benchmark-results-content').html(html);
+            $container.show();
+            
+            if (metrics && metrics.length > 0 && this.charts.live) {
+                var labels = [];
+                var responseData = [];
+                
+                metrics.forEach(function(metric) {
+                    labels.push(metric.iteration);
+                    responseData.push(metric.response_time);
+                });
+                
+                this.charts.live.data.labels = labels;
+                this.charts.live.data.datasets[0].data = responseData;
+                this.charts.live.update();
+            }
+        },
+        
+        displaySimpleReport: function(report, $container) {
+            var html = '<div class="wcb-report-summary">';
+            html += '<div class="wcb-report-score">';
+            html += '<span class="score-value">' + (report.score || 0) + '</span>';
+            html += '<span class="score-label">Performance Score</span>';
+            html += '</div>';
+            html += '<div class="wcb-report-status">';
+            html += '<h3>Grade: ' + (report.grade || 'N/A') + '</h3>';
+            html += '</div>';
+            html += '</div>';
+            
+            if (report.bottlenecks && report.bottlenecks.length > 0) {
+                html += '<h3>Bottlenecks</h3><ul>';
+                report.bottlenecks.forEach(function(b) {
+                    html += '<li><strong>' + b.severity + ':</strong> ' + b.message + '</li>';
+                });
+                html += '</ul>';
+            }
+            
+            if (report.suggestions && report.suggestions.length > 0) {
+                html += '<h3>Suggestions</h3><ul>';
+                report.suggestions.forEach(function(s) {
+                    html += '<li>' + s + '</li>';
+                });
+                html += '</ul>';
+            }
+            
+            $container.find('#benchmark-report-content').html(html);
+            $container.show();
+        },
+        
+        resetBenchmarkUI: function() {
+            var $button = $('#start-benchmark');
+            var $stopButton = $('#stop-benchmark');
+            var $config = $('.wcb-benchmark-config');
+            
+            $button.prop('disabled', false).show();
+            $stopButton.hide().text('Stop Benchmark');
+            $config.find('input, select').prop('disabled', false);
+            this.currentJobId = null;
         },
         
         getDurationIterations: function(duration) {
