@@ -60,12 +60,17 @@ index.php                     # Demo interface (standalone showcase)
 - Actionable improvement suggestions
 - Detailed query statistics
 
-### Stress Test Features
-- Duration-scaled post creation (100-5000 posts based on duration)
-- Read posts via WP REST API
-- Reload WordPress options with forced cache deletions
-- Simulate cron jobs writing 1MB files to disk
-- Automatic cleanup of all test data
+### Benchmark Test Types (Run Benchmark & Stress Test)
+Both benchmark and stress test pages now support the same test types with duration-based scaling:
+
+| Test Type | Quick | 2 Minutes | 5 Minutes | Until Stop |
+|-----------|-------|-----------|-----------|------------|
+| Create posts with metadata | 100 | 1,000 | 2,500 | 5,000 |
+| Read posts via API | 50 | 500 | 1,000 | 2,000 |
+| Reload options with cache flush | 20 | 100 | 200 | 500 |
+| Simulate cron (1MB file writes) | 5 | 25 | 50 | 100 |
+
+All test data is automatically cleaned up after the test completes.
 
 ### Comparison System
 - Compare 2-5 benchmarks side by side
@@ -111,3 +116,6 @@ Run `php -S 0.0.0.0:5000` to view the standalone demo interface that showcases a
 - 2024-12-18: Created performance report generator with bottleneck analysis and actionable suggestions
 - 2024-12-18: Updated admin UI with duration selector, log display, and report sections
 - 2024-12-18: Updated demo interface to showcase all new features
+- 2024-12-18: Added multi-test selection to Run Benchmark page (matching Stress Test options)
+- 2024-12-18: Implemented duration-based test scaling for all test types
+- 2024-12-18: Added API read test, option reload test, and cron simulation test methods
