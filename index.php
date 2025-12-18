@@ -583,6 +583,207 @@ $stats = getServerStats();
         .phase-icon { font-size: 24px; display: block; margin-bottom: 5px; }
         .phase-name { display: block; font-weight: 600; font-size: 12px; margin-bottom: 5px; }
         .phase-status { display: block; font-size: 11px; color: var(--text-muted); }
+        
+        .duration-options {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 10px;
+        }
+        
+        @media (max-width: 1000px) {
+            .duration-options { grid-template-columns: repeat(2, 1fr); }
+        }
+        
+        .duration-option {
+            cursor: pointer;
+        }
+        
+        .duration-option input[type="radio"] {
+            position: absolute;
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+        
+        .duration-card {
+            display: flex;
+            flex-direction: column;
+            padding: 15px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            text-align: center;
+            transition: all 0.2s;
+            background: #fff;
+        }
+        
+        .duration-option input[type="radio"]:checked + .duration-card {
+            border-color: var(--primary);
+            background: #e7f3ff;
+            box-shadow: 0 2px 8px rgba(34, 113, 177, 0.2);
+        }
+        
+        .duration-option:hover .duration-card { border-color: var(--primary); }
+        
+        .duration-card strong { font-size: 16px; margin-bottom: 5px; }
+        .duration-desc { font-size: 12px; color: var(--text-muted); }
+        
+        .checkbox-group {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        
+        .checkbox-group label {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            cursor: pointer;
+        }
+        
+        .btn-danger {
+            background: #dc3545;
+            border-color: #dc3545;
+            color: #fff;
+        }
+        
+        .btn-danger:hover {
+            background: #c82333;
+            border-color: #bd2130;
+        }
+        
+        .log-count {
+            background: var(--primary);
+            color: #fff;
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 12px;
+            font-weight: normal;
+        }
+        
+        .log-filters {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 10px;
+            padding: 10px;
+            background: #f9f9f9;
+            border-radius: 4px;
+        }
+        
+        .log-filters label {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            font-weight: normal;
+            font-size: 12px;
+            cursor: pointer;
+        }
+        
+        .log-container {
+            max-height: 400px;
+            overflow-y: auto;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            background: #1d2327;
+            padding: 10px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+        }
+        
+        .log-entry {
+            display: flex;
+            gap: 10px;
+            padding: 4px 8px;
+            border-radius: 2px;
+            margin-bottom: 2px;
+        }
+        
+        .log-time { color: #888; min-width: 60px; }
+        .log-message { flex: 1; word-break: break-word; }
+        
+        .log-info .log-message { color: #a8d4ff; }
+        .log-success .log-message { color: #7ee787; }
+        .log-warning .log-message { color: #f0ad4e; }
+        .log-error .log-message { color: #f85149; }
+        .log-slow .log-message { color: #ff7b72; font-weight: 600; }
+        
+        .report-summary {
+            display: grid;
+            grid-template-columns: 1fr 3fr;
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        
+        .report-score {
+            text-align: center;
+            padding: 20px;
+            border-radius: 8px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #fff;
+        }
+        
+        .score-value { font-size: 48px; font-weight: 700; display: block; }
+        .score-label { font-size: 14px; opacity: 0.9; }
+        
+        .report-status {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            padding: 20px;
+            background: #f9f9f9;
+            border-radius: 8px;
+        }
+        
+        .report-status h3 { margin: 0 0 10px; font-size: 20px; }
+        .report-status p { margin: 0 0 5px; color: var(--text-muted); }
+        
+        .grades-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 15px;
+            margin-top: 10px;
+        }
+        
+        .grade-card {
+            text-align: center;
+            padding: 20px;
+            border-radius: 8px;
+            background: #f9f9f9;
+        }
+        
+        .grade-value { font-size: 36px; font-weight: 700; display: block; margin-bottom: 5px; }
+        .grade-label { font-size: 12px; color: var(--text-muted); }
+        
+        .bottleneck-list, .suggestions-list { margin-top: 10px; }
+        
+        .bottleneck-item {
+            display: flex;
+            align-items: flex-start;
+            gap: 15px;
+            padding: 15px;
+            margin-bottom: 10px;
+            border-radius: 8px;
+            background: #f9f9f9;
+            border-left: 4px solid #ddd;
+        }
+        
+        .bottleneck-item.critical { border-left-color: #dc3545; background: #fff5f5; }
+        .bottleneck-item.warning { border-left-color: #ffc107; background: #fffbf0; }
+        
+        .bottleneck-icon { font-size: 24px; min-width: 30px; }
+        .bottleneck-content h4 { margin: 0 0 5px; font-size: 14px; }
+        .bottleneck-content p { margin: 0; font-size: 13px; color: var(--text-muted); }
+        
+        .suggestion-item {
+            padding: 15px;
+            margin-bottom: 10px;
+            border-radius: 8px;
+            background: #e8f5e9;
+            border-left: 4px solid #4caf50;
+        }
+        
+        .suggestion-item h4 { margin: 0 0 10px; color: #2e7d32; }
+        .suggestion-item ul { margin: 0; padding-left: 20px; }
+        .suggestion-item li { margin-bottom: 5px; font-size: 13px; }
     </style>
 </head>
 <body>
@@ -775,11 +976,48 @@ $stats = getServerStats();
                             <p class="form-description">Select a profile to test specific plugin configurations, or use current setup.</p>
                         </div>
                         <div class="form-row">
-                            <label>Iterations</label>
-                            <input type="number" value="10" min="5" max="100" step="5">
-                            <p class="form-description">Number of test iterations (5-100). More iterations = more accurate results.</p>
+                            <label>Benchmark Duration</label>
+                            <div class="duration-options">
+                                <label class="duration-option">
+                                    <input type="radio" name="duration" value="quick" checked>
+                                    <span class="duration-card">
+                                        <strong>Quick</strong>
+                                        <span class="duration-desc">~1 min, 100 posts, 10 iterations</span>
+                                    </span>
+                                </label>
+                                <label class="duration-option">
+                                    <input type="radio" name="duration" value="2min">
+                                    <span class="duration-card">
+                                        <strong>2 Minutes</strong>
+                                        <span class="duration-desc">1,000 posts, 50 iterations</span>
+                                    </span>
+                                </label>
+                                <label class="duration-option">
+                                    <input type="radio" name="duration" value="5min">
+                                    <span class="duration-card">
+                                        <strong>5 Minutes</strong>
+                                        <span class="duration-desc">2,500 posts, 100 iterations</span>
+                                    </span>
+                                </label>
+                                <label class="duration-option">
+                                    <input type="radio" name="duration" value="until_stop">
+                                    <span class="duration-card">
+                                        <strong>Until I Stop It</strong>
+                                        <span class="duration-desc">Max 10 min, 5,000 posts</span>
+                                    </span>
+                                </label>
+                            </div>
                         </div>
-                        <button type="button" class="btn btn-primary btn-hero" id="startBenchmark">&#9889; Start Benchmark</button>
+                        <div class="form-row">
+                            <label>Test Components</label>
+                            <div class="checkbox-group">
+                                <label><input type="checkbox" checked> Create test posts (stress test)</label>
+                            </div>
+                        </div>
+                        <div style="display: flex; gap: 10px;">
+                            <button type="button" class="btn btn-primary btn-hero" id="startBenchmark">&#9889; Start Benchmark</button>
+                            <button type="button" class="btn btn-danger btn-hero" id="stopBenchmark" style="display: none;">&#9632; Stop Benchmark</button>
+                        </div>
                     </form>
                 </div>
                 
@@ -814,6 +1052,81 @@ $stats = getServerStats();
                     </div>
                     <div class="chart-container">
                         <canvas id="liveChart" height="200"></canvas>
+                    </div>
+                </div>
+                
+                <div class="card" id="benchmarkLog" style="display: none;">
+                    <h2 class="card-title" style="display: flex; align-items: center; gap: 10px;">
+                        Benchmark Log
+                        <span class="log-count" id="logCount">0</span>
+                    </h2>
+                    <div class="log-filters">
+                        <label><input type="checkbox" checked> Info</label>
+                        <label><input type="checkbox" checked> Slow</label>
+                        <label><input type="checkbox" checked> Warnings</label>
+                        <label><input type="checkbox" checked> Success</label>
+                    </div>
+                    <div class="log-container" id="logContainer">
+                        <div class="log-entry log-info">
+                            <span class="log-time">0.0s</span>
+                            <span class="log-message">Waiting for benchmark to start...</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="card" id="benchmarkReport" style="display: none;">
+                    <h2 class="card-title">Performance Report</h2>
+                    <div class="report-summary">
+                        <div class="report-score">
+                            <span class="score-value" id="reportScore">85</span>
+                            <span class="score-label">Performance Score</span>
+                        </div>
+                        <div class="report-status">
+                            <h3 id="reportStatus">Good</h3>
+                            <p id="reportMessage">Your site has good performance with room for improvement.</p>
+                            <p><strong>Critical Issues:</strong> <span id="criticalCount">1</span> | <strong>Warnings:</strong> <span id="warningCount">3</span></p>
+                        </div>
+                    </div>
+                    <h3>Performance Grades</h3>
+                    <div class="grades-grid">
+                        <div class="grade-card">
+                            <span class="grade-value" style="color: #22c55e;">A</span>
+                            <span class="grade-label">Response Time</span>
+                        </div>
+                        <div class="grade-card">
+                            <span class="grade-value" style="color: #84cc16;">B</span>
+                            <span class="grade-label">Memory Usage</span>
+                        </div>
+                        <div class="grade-card">
+                            <span class="grade-value" style="color: #eab308;">C</span>
+                            <span class="grade-label">Database Queries</span>
+                        </div>
+                        <div class="grade-card">
+                            <span class="grade-value" style="color: #22c55e;">A</span>
+                            <span class="grade-label">Cache Hit Rate</span>
+                        </div>
+                    </div>
+                    <h3 style="margin-top: 20px;">Identified Bottlenecks</h3>
+                    <div class="bottleneck-list">
+                        <div class="bottleneck-item warning">
+                            <span class="bottleneck-icon">&#9888;</span>
+                            <div class="bottleneck-content">
+                                <h4>Database Queries</h4>
+                                <p>High number of database queries per request (65)</p>
+                                <p><em>Impact: Increased load on database server</em></p>
+                            </div>
+                        </div>
+                    </div>
+                    <h3 style="margin-top: 20px;">Recommendations</h3>
+                    <div class="suggestions-list">
+                        <div class="suggestion-item">
+                            <h4>Reduce Database Load</h4>
+                            <ul>
+                                <li>Install a database query caching plugin</li>
+                                <li>Use object caching (Redis/Memcached)</li>
+                                <li>Review and deactivate query-heavy plugins</li>
+                            </ul>
+                        </div>
                     </div>
                 </div>
                 
@@ -1175,7 +1488,19 @@ $stats = getServerStats();
             if (startBenchmark) {
                 startBenchmark.addEventListener('click', function() {
                     document.getElementById('benchmarkProgress').style.display = 'block';
+                    document.getElementById('benchmarkLog').style.display = 'block';
+                    document.getElementById('startBenchmark').style.display = 'none';
+                    document.getElementById('stopBenchmark').style.display = 'inline-block';
                     simulateBenchmark();
+                });
+            }
+            
+            var stopBenchmark = document.getElementById('stopBenchmark');
+            if (stopBenchmark) {
+                stopBenchmark.addEventListener('click', function() {
+                    document.getElementById('stopBenchmark').style.display = 'none';
+                    document.getElementById('startBenchmark').style.display = 'inline-block';
+                    document.getElementById('progressText').textContent = 'Benchmark stopped by user';
                 });
             }
             
@@ -1195,6 +1520,27 @@ $stats = getServerStats();
             var current = 0;
             var responseData = [];
             var labels = [];
+            var logCount = 0;
+            var startTime = Date.now();
+            
+            var logContainer = document.getElementById('logContainer');
+            logContainer.innerHTML = '';
+            
+            function addLog(message, type) {
+                type = type || 'info';
+                logCount++;
+                var elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+                var html = '<div class="log-entry log-' + type + '">' +
+                           '<span class="log-time">' + elapsed + 's</span>' +
+                           '<span class="log-message">' + message + '</span>' +
+                           '</div>';
+                logContainer.innerHTML += html;
+                logContainer.scrollTop = logContainer.scrollHeight;
+                document.getElementById('logCount').textContent = logCount;
+            }
+            
+            addLog('Benchmark started with Quick duration', 'info');
+            addLog('Creating test posts...', 'info');
             
             var ctx = document.getElementById('liveChart');
             var chart = new Chart(ctx, {
@@ -1239,9 +1585,26 @@ $stats = getServerStats();
                 document.getElementById('progressBar').style.width = (current / iterations * 100) + '%';
                 document.getElementById('progressPercent').textContent = Math.round(current / iterations * 100) + '%';
                 
+                addLog('[Iteration ' + current + '] Response: ' + responseTime.toFixed(2) + 'ms, Memory: ' + memory.toFixed(1) + 'MB', 'info');
+                
+                if (responseTime > 120) {
+                    addLog('SLOW: Query execution took ' + responseTime.toFixed(0) + 'ms in wp-includes/post.php:1234', 'slow');
+                }
+                
+                if (current === 5) {
+                    addLog('Heartbeat: 50% complete, avg response: ' + (responseData.reduce((a,b) => a+b, 0) / responseData.length).toFixed(2) + 'ms', 'success');
+                }
+                
                 if (current >= iterations) {
                     clearInterval(interval);
                     document.getElementById('progressText').textContent = 'Benchmark completed!';
+                    document.getElementById('stopBenchmark').style.display = 'none';
+                    document.getElementById('startBenchmark').style.display = 'inline-block';
+                    
+                    addLog('Cleaning up test data...', 'info');
+                    addLog('Benchmark completed successfully!', 'success');
+                    
+                    document.getElementById('benchmarkReport').style.display = 'block';
                 }
             }, 500);
         }

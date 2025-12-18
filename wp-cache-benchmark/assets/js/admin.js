@@ -121,16 +121,26 @@
             
             var $form = $(e.currentTarget);
             var $button = $('#start-benchmark');
+            var $stopButton = $('#stop-benchmark');
             var $config = $('.wcb-benchmark-config');
             var $progress = $('.wcb-benchmark-progress');
+            var $log = $('.wcb-benchmark-log');
             var $results = $('.wcb-benchmark-results');
+            var $report = $('.wcb-benchmark-report');
             
-            $button.prop('disabled', true);
+            $button.prop('disabled', true).hide();
+            $stopButton.show();
             $config.find('input, select').prop('disabled', true);
             $progress.show();
+            $log.show();
             
-            var iterations = parseInt($('#iterations').val());
+            var duration = $('input[name="duration"]:checked').val();
+            var iterations = this.getDurationIterations(duration);
             this.initLiveChart(iterations);
+            this.clearLog();
+            this.addLogEntry('Benchmark started with duration: ' + duration, 'info');
+            
+            var self = this;
             
             $.ajax({
                 url: wpCacheBenchmark.ajaxUrl,
@@ -139,28 +149,166 @@
                     action: 'wcb_run_benchmark',
                     nonce: wpCacheBenchmark.nonce,
                     profile_id: $('#profile-select').val(),
-                    iterations: iterations,
-                    name: $('#benchmark-name').val()
+                    duration: duration,
+                    name: $('#benchmark-name').val(),
+                    create_posts: $('input[name="create_posts"]').is(':checked') ? '1' : '0'
                 },
-                timeout: 300000,
+                timeout: 700000,
                 success: function(response) {
                     if (response.success) {
                         WCB.displayBenchmarkResults(response.data, $results);
+                        WCB.displayLogs(response.data.logs);
+                        WCB.displayReport(response.data.report, $report);
                         $('#progress-text').text(wpCacheBenchmark.strings.benchmarkComplete);
                         $('#benchmark-progress').css('width', '100%');
                         $('#progress-percent').text('100%');
+                        self.addLogEntry('Benchmark completed successfully!', 'success');
                     } else {
                         alert(response.data.message);
+                        self.addLogEntry('Benchmark failed: ' + response.data.message, 'error');
                     }
-                    $button.prop('disabled', false);
+                    $button.prop('disabled', false).show();
+                    $stopButton.hide();
                     $config.find('input, select').prop('disabled', false);
                 },
                 error: function() {
                     alert(wpCacheBenchmark.strings.error);
-                    $button.prop('disabled', false);
+                    self.addLogEntry('Benchmark failed due to an error', 'error');
+                    $button.prop('disabled', false).show();
+                    $stopButton.hide();
                     $config.find('input, select').prop('disabled', false);
                 }
             });
+        },
+        
+        getDurationIterations: function(duration) {
+            var map = {
+                'quick': 10,
+                '2min': 50,
+                '5min': 100,
+                'until_stop': 500
+            };
+            return map[duration] || 10;
+        },
+        
+        clearLog: function() {
+            $('#benchmark-log').html('');
+            $('#log-count').text('0');
+        },
+        
+        addLogEntry: function(message, type) {
+            type = type || 'info';
+            var time = ((Date.now() - (this.benchmarkStartTime || Date.now())) / 1000).toFixed(1) + 's';
+            
+            if (!this.benchmarkStartTime) {
+                this.benchmarkStartTime = Date.now();
+            }
+            
+            var html = '<div class="wcb-log-entry wcb-log-' + type + '">' +
+                       '<span class="wcb-log-time">' + time + '</span>' +
+                       '<span class="wcb-log-message">' + this.escapeHtml(message) + '</span>' +
+                       '</div>';
+            
+            var $log = $('#benchmark-log');
+            $log.append(html);
+            $log.scrollTop($log[0].scrollHeight);
+            
+            var count = $log.find('.wcb-log-entry').length;
+            $('#log-count').text(count);
+        },
+        
+        escapeHtml: function(text) {
+            var div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        },
+        
+        displayLogs: function(logs) {
+            if (!logs || logs.length === 0) return;
+            
+            var $log = $('#benchmark-log');
+            $log.html('');
+            
+            logs.forEach(function(log) {
+                var html = '<div class="wcb-log-entry wcb-log-' + log.type + '">' +
+                           '<span class="wcb-log-time">' + log.formatted_time + '</span>' +
+                           '<span class="wcb-log-message">' + WCB.escapeHtml(log.message) + '</span>' +
+                           '</div>';
+                $log.append(html);
+            });
+            
+            $log.scrollTop($log[0].scrollHeight);
+            $('#log-count').text(logs.length);
+        },
+        
+        displayReport: function(report, $container) {
+            if (!report) return;
+            
+            var html = '<div class="wcb-report-summary">';
+            html += '<div class="wcb-report-score">';
+            html += '<span class="score-value">' + report.summary.overall_score + '</span>';
+            html += '<span class="score-label">Performance Score</span>';
+            html += '</div>';
+            html += '<div class="wcb-report-status">';
+            html += '<h3>' + report.summary.status + '</h3>';
+            html += '<p>' + report.summary.message + '</p>';
+            html += '<p><strong>Critical Issues:</strong> ' + report.summary.critical_issues + 
+                    ' | <strong>Warnings:</strong> ' + report.summary.warnings + '</p>';
+            html += '</div>';
+            html += '</div>';
+            
+            if (report.performance_grades) {
+                html += '<h3>Performance Grades</h3>';
+                html += '<div class="wcb-grades-grid">';
+                var gradeLabels = {
+                    'response_time': 'Response Time',
+                    'memory_usage': 'Memory Usage',
+                    'database_queries': 'Database Queries',
+                    'cache_hit_rate': 'Cache Hit Rate'
+                };
+                for (var key in report.performance_grades) {
+                    var grade = report.performance_grades[key];
+                    html += '<div class="wcb-grade-card">';
+                    html += '<span class="wcb-grade-value" style="color: ' + grade.color + '">' + grade.grade + '</span>';
+                    html += '<span class="wcb-grade-label">' + (gradeLabels[key] || key) + '</span>';
+                    html += '</div>';
+                }
+                html += '</div>';
+            }
+            
+            if (report.bottlenecks && report.bottlenecks.length > 0) {
+                html += '<h3>Identified Bottlenecks</h3>';
+                html += '<div class="wcb-bottleneck-list">';
+                report.bottlenecks.forEach(function(bottleneck) {
+                    var icon = bottleneck.severity === 'critical' ? '&#9888;' : '&#9888;';
+                    html += '<div class="wcb-bottleneck-item ' + bottleneck.severity + '">';
+                    html += '<span class="wcb-bottleneck-icon">' + icon + '</span>';
+                    html += '<div class="wcb-bottleneck-content">';
+                    html += '<h4>' + bottleneck.category + '</h4>';
+                    html += '<p>' + bottleneck.description + '</p>';
+                    html += '<p><em>Impact: ' + bottleneck.impact + '</em></p>';
+                    html += '</div></div>';
+                });
+                html += '</div>';
+            }
+            
+            if (report.suggestions && report.suggestions.length > 0) {
+                html += '<h3>Recommendations</h3>';
+                html += '<div class="wcb-suggestions-list">';
+                report.suggestions.forEach(function(suggestion) {
+                    html += '<div class="wcb-suggestion-item">';
+                    html += '<h4>' + suggestion.title + '</h4>';
+                    html += '<ul>';
+                    suggestion.actions.forEach(function(action) {
+                        html += '<li>' + action + '</li>';
+                    });
+                    html += '</ul></div>';
+                });
+                html += '</div>';
+            }
+            
+            $container.find('#benchmark-report-content').html(html);
+            $container.show();
         },
         
         initLiveChart: function(iterations) {

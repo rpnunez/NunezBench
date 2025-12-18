@@ -40,6 +40,9 @@ class WP_Cache_Benchmark {
     private function includes() {
         require_once WP_CACHE_BENCHMARK_PLUGIN_DIR . 'includes/class-database.php';
         require_once WP_CACHE_BENCHMARK_PLUGIN_DIR . 'includes/class-profile-manager.php';
+        require_once WP_CACHE_BENCHMARK_PLUGIN_DIR . 'includes/class-query-tracker.php';
+        require_once WP_CACHE_BENCHMARK_PLUGIN_DIR . 'includes/class-benchmark-logger.php';
+        require_once WP_CACHE_BENCHMARK_PLUGIN_DIR . 'includes/class-report-generator.php';
         require_once WP_CACHE_BENCHMARK_PLUGIN_DIR . 'includes/class-benchmark-engine.php';
         require_once WP_CACHE_BENCHMARK_PLUGIN_DIR . 'includes/class-resource-monitor.php';
         require_once WP_CACHE_BENCHMARK_PLUGIN_DIR . 'includes/class-stress-tester.php';

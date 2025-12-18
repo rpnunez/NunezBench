@@ -81,24 +81,36 @@ class WP_Cache_Benchmark_Ajax_Handler {
         }
         
         $profile_id = isset($_POST['profile_id']) ? intval($_POST['profile_id']) : 0;
-        $iterations = isset($_POST['iterations']) ? intval($_POST['iterations']) : 10;
+        $duration = isset($_POST['duration']) ? sanitize_text_field($_POST['duration']) : 'quick';
         $name = isset($_POST['name']) ? sanitize_text_field($_POST['name']) : null;
+        $create_posts = isset($_POST['create_posts']) && $_POST['create_posts'] === '1';
         
-        $iterations = max(5, min(100, $iterations));
+        $valid_durations = array('quick', '2min', '5min', 'until_stop');
+        if (!in_array($duration, $valid_durations)) {
+            $duration = 'quick';
+        }
         
-        set_time_limit(300);
+        set_time_limit(700);
         
         $engine = new WP_Cache_Benchmark_Engine();
-        $result_id = $engine->run($profile_id > 0 ? $profile_id : null, $iterations, $name);
+        $benchmark_result = $engine->run(
+            $profile_id > 0 ? $profile_id : null, 
+            $duration, 
+            $name,
+            array('create_posts' => $create_posts)
+        );
         
-        $result = WP_Cache_Benchmark_Database::get_result($result_id);
-        $metrics = WP_Cache_Benchmark_Database::get_metrics($result_id);
+        $result = WP_Cache_Benchmark_Database::get_result($benchmark_result['result_id']);
+        $metrics = WP_Cache_Benchmark_Database::get_metrics($benchmark_result['result_id']);
         
         wp_send_json_success(array(
             'message' => __('Benchmark completed successfully.', 'wp-cache-benchmark'),
-            'result_id' => $result_id,
+            'result_id' => $benchmark_result['result_id'],
             'result' => $result,
-            'metrics' => $metrics
+            'metrics' => $metrics,
+            'logs' => $benchmark_result['logs'],
+            'query_stats' => $benchmark_result['query_stats'],
+            'report' => $benchmark_result['report']
         ));
     }
     

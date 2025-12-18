@@ -270,15 +270,57 @@ class WP_Cache_Benchmark_Admin_UI {
                         </div>
                         
                         <div class="wcb-form-row">
-                            <label for="iterations"><?php echo esc_html__('Iterations', 'wp-cache-benchmark'); ?></label>
-                            <input type="number" id="iterations" name="iterations" value="10" min="5" max="100" step="5">
-                            <p class="description"><?php echo esc_html__('Number of test iterations (5-100). More iterations = more accurate results.', 'wp-cache-benchmark'); ?></p>
+                            <label for="benchmark-duration"><?php echo esc_html__('Benchmark Duration', 'wp-cache-benchmark'); ?></label>
+                            <div class="wcb-duration-options">
+                                <label class="wcb-duration-option">
+                                    <input type="radio" name="duration" value="quick" checked>
+                                    <span class="wcb-duration-card">
+                                        <strong><?php echo esc_html__('Quick', 'wp-cache-benchmark'); ?></strong>
+                                        <span class="wcb-duration-desc"><?php echo esc_html__('~1 min, 100 posts, 10 iterations', 'wp-cache-benchmark'); ?></span>
+                                    </span>
+                                </label>
+                                <label class="wcb-duration-option">
+                                    <input type="radio" name="duration" value="2min">
+                                    <span class="wcb-duration-card">
+                                        <strong><?php echo esc_html__('2 Minutes', 'wp-cache-benchmark'); ?></strong>
+                                        <span class="wcb-duration-desc"><?php echo esc_html__('1,000 posts, 50 iterations', 'wp-cache-benchmark'); ?></span>
+                                    </span>
+                                </label>
+                                <label class="wcb-duration-option">
+                                    <input type="radio" name="duration" value="5min">
+                                    <span class="wcb-duration-card">
+                                        <strong><?php echo esc_html__('5 Minutes', 'wp-cache-benchmark'); ?></strong>
+                                        <span class="wcb-duration-desc"><?php echo esc_html__('2,500 posts, 100 iterations', 'wp-cache-benchmark'); ?></span>
+                                    </span>
+                                </label>
+                                <label class="wcb-duration-option">
+                                    <input type="radio" name="duration" value="until_stop">
+                                    <span class="wcb-duration-card">
+                                        <strong><?php echo esc_html__('Until I Stop It', 'wp-cache-benchmark'); ?></strong>
+                                        <span class="wcb-duration-desc"><?php echo esc_html__('Max 10 min, 5,000 posts', 'wp-cache-benchmark'); ?></span>
+                                    </span>
+                                </label>
+                            </div>
+                        </div>
+                        
+                        <div class="wcb-form-row">
+                            <label><?php echo esc_html__('Test Components', 'wp-cache-benchmark'); ?></label>
+                            <div class="wcb-checkbox-group">
+                                <label>
+                                    <input type="checkbox" name="create_posts" value="1" checked>
+                                    <?php echo esc_html__('Create test posts (stress test)', 'wp-cache-benchmark'); ?>
+                                </label>
+                            </div>
                         </div>
                         
                         <div class="wcb-form-actions">
                             <button type="submit" class="button button-primary button-hero" id="start-benchmark">
                                 <span class="dashicons dashicons-performance"></span>
                                 <?php echo esc_html__('Start Benchmark', 'wp-cache-benchmark'); ?>
+                            </button>
+                            <button type="button" class="button button-secondary button-hero" id="stop-benchmark" style="display: none;">
+                                <span class="dashicons dashicons-controls-pause"></span>
+                                <?php echo esc_html__('Stop Benchmark', 'wp-cache-benchmark'); ?>
                             </button>
                         </div>
                     </form>
@@ -321,9 +363,33 @@ class WP_Cache_Benchmark_Admin_UI {
                     </div>
                 </div>
                 
+                <div class="wcb-card wcb-benchmark-log" style="display: none;">
+                    <h2>
+                        <?php echo esc_html__('Benchmark Log', 'wp-cache-benchmark'); ?>
+                        <span class="wcb-log-count" id="log-count">0</span>
+                    </h2>
+                    <div class="wcb-log-filters">
+                        <label><input type="checkbox" id="filter-info" checked> Info</label>
+                        <label><input type="checkbox" id="filter-slow" checked> Slow</label>
+                        <label><input type="checkbox" id="filter-warning" checked> Warnings</label>
+                        <label><input type="checkbox" id="filter-success" checked> Success</label>
+                    </div>
+                    <div class="wcb-log-container" id="benchmark-log">
+                        <div class="wcb-log-entry wcb-log-info">
+                            <span class="wcb-log-time">0.0s</span>
+                            <span class="wcb-log-message">Waiting for benchmark to start...</span>
+                        </div>
+                    </div>
+                </div>
+                
                 <div class="wcb-card wcb-benchmark-results" style="display: none;">
                     <h2><?php echo esc_html__('Results', 'wp-cache-benchmark'); ?></h2>
                     <div id="benchmark-results-content"></div>
+                </div>
+                
+                <div class="wcb-card wcb-benchmark-report" style="display: none;">
+                    <h2><?php echo esc_html__('Performance Report', 'wp-cache-benchmark'); ?></h2>
+                    <div id="benchmark-report-content"></div>
                 </div>
             </div>
         </div>
