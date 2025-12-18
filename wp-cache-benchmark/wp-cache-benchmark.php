@@ -59,6 +59,7 @@ class WP_Cache_Benchmark {
     }
     
     public static function activate() {
+        require_once WP_CACHE_BENCHMARK_PLUGIN_DIR . 'includes/class-database.php';
         WP_Cache_Benchmark_Database::create_tables();
         flush_rewrite_rules();
     }
