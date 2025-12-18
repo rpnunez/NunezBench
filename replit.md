@@ -84,8 +84,18 @@ All test data is automatically cleaned up after the test completes.
 
 ## Database Tables
 - `{prefix}_cache_benchmark_profiles` - Stores cache profile configurations
-- `{prefix}_cache_benchmark_results` - Stores benchmark results
+- `{prefix}_cache_benchmark_results` - Stores benchmark results with progress tracking (current_iteration, total_iterations, stop_requested, last_heartbeat, job_config)
 - `{prefix}_cache_benchmark_metrics` - Stores per-iteration metrics
+- `{prefix}_cache_benchmark_logs` - Stores live benchmark logs for incremental streaming
+
+## Async Architecture
+The benchmark execution uses an asynchronous chunk-based model:
+
+1. **Start**: `wcb_start_benchmark` creates a job record with configuration and returns job_id
+2. **Poll**: `wcb_poll_benchmark` processes a small chunk (~5 iterations, <2s) and returns incremental logs/metrics
+3. **Stop**: `wcb_stop_benchmark` sets stop_requested flag for graceful termination
+
+The frontend polls every 1.5 seconds, with each poll both processing work and fetching new data. This enables live UI updates without blocking.
 
 ## WordPress Hooks
 - `admin_menu` - Adds admin menu pages
@@ -121,3 +131,12 @@ Run `php -S 0.0.0.0:5000` to view the standalone demo interface that showcases a
 - 2024-12-18: Added API read test, option reload test, and cron simulation test methods
 - 2024-12-18: Fixed plugin activation to create database tables on install
 - 2024-12-18: Fixed numeric field casting in AJAX responses for JavaScript compatibility
+- 2024-12-18: Refactored to async chunk-based benchmark execution with polling for live UI updates
+- 2024-12-18: Added new database fields for job state tracking (current_iteration, stop_requested, job_config)
+- 2024-12-18: Created live logs table for incremental streaming
+- 2024-12-18: Replaced synchronous AJAX with start/poll/stop endpoints for non-blocking execution
+- 2024-12-18: Updated JavaScript to use 1.5s polling loop for real-time progress and log updates
+- 2024-12-18: Fixed progress tracking with job_config['total_completed'] counter for accurate iteration counting
+- 2024-12-18: Added complete metrics capture (CPU, RAM, disk I/O, db_queries, cache stats) to all work methods
+- 2024-12-18: Implemented proper resource_monitor and query_tracker lifecycle (start/reset/stop) per chunk
+- 2024-12-18: Database is now single source of truth for all metrics - finalize_job aggregates from metrics table only

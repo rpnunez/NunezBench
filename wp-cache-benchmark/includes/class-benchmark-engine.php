@@ -92,12 +92,7 @@ class WP_Cache_Benchmark_Engine {
             'max_end_time' => time() + $config['max_time'],
             'phases' => $this->build_phases($config, $options),
             'current_phase_index' => 0,
-            'phase_progress' => 0,
-            'response_times' => array(),
-            'memory_usages' => array(),
-            'db_queries' => array(),
-            'cache_hits' => 0,
-            'cache_misses' => 0,
+            'total_completed' => 0,
             'created_post_ids' => array()
         );
         
@@ -178,7 +173,7 @@ class WP_Cache_Benchmark_Engine {
             return array('status' => 'error', 'message' => 'Job not found');
         }
         
-        if ($result->status === 'completed' || $result->status === 'failed') {
+        if ($result->status === 'completed' || $result->status === 'failed' || $result->status === 'stopped') {
             return array('status' => $result->status, 'message' => 'Job already finished');
         }
         
@@ -187,9 +182,11 @@ class WP_Cache_Benchmark_Engine {
         }
         
         $job_config = maybe_unserialize($result->job_config);
-        if (!$job_config) {
+        if (!$job_config || !is_array($job_config)) {
             return array('status' => 'error', 'message' => 'Invalid job config');
         }
+        
+        if (!isset($job_config['created_post_ids'])) $job_config['created_post_ids'] = array();
         
         if (time() > $job_config['max_end_time']) {
             return $this->finalize_job($job_id, 'completed');
@@ -202,8 +199,11 @@ class WP_Cache_Benchmark_Engine {
         
         $phases = $job_config['phases'];
         $phase_index = $job_config['current_phase_index'];
+        $total_completed = isset($job_config['total_completed']) ? intval($job_config['total_completed']) : 0;
         
         if ($phase_index >= count($phases)) {
+            $this->query_tracker->stop_tracking();
+            $this->resource_monitor->stop();
             return $this->finalize_job($job_id);
         }
         
@@ -226,37 +226,25 @@ class WP_Cache_Benchmark_Engine {
             $processed++;
             
             if ($work_result) {
-                if (isset($work_result['response_time'])) {
-                    $job_config['response_times'][] = $work_result['response_time'];
-                }
-                if (isset($work_result['memory_usage'])) {
-                    $job_config['memory_usages'][] = $work_result['memory_usage'];
-                }
-                if (isset($work_result['db_queries'])) {
-                    $job_config['db_queries'][] = $work_result['db_queries'];
-                }
-                if (isset($work_result['cache_hits'])) {
-                    $job_config['cache_hits'] += $work_result['cache_hits'];
-                }
-                if (isset($work_result['cache_misses'])) {
-                    $job_config['cache_misses'] += $work_result['cache_misses'];
-                }
                 if (isset($work_result['post_id'])) {
                     $job_config['created_post_ids'][] = $work_result['post_id'];
                 }
                 
+                $total_completed++;
+                $phases[$phase_index] = $current_phase;
+                
                 WP_Cache_Benchmark_Database::save_metric(array(
                     'result_id' => $job_id,
-                    'iteration' => $this->get_total_completed($phases, $phase_index, $current_phase['completed']),
-                    'response_time' => isset($work_result['response_time']) ? $work_result['response_time'] : null,
-                    'memory_usage' => isset($work_result['memory_usage']) ? $work_result['memory_usage'] : null,
-                    'db_queries' => isset($work_result['db_queries']) ? $work_result['db_queries'] : null,
-                    'cpu_usage' => isset($work_result['cpu_usage']) ? $work_result['cpu_usage'] : null,
-                    'ram_usage' => isset($work_result['ram_usage']) ? $work_result['ram_usage'] : null,
-                    'disk_read' => isset($work_result['disk_read']) ? $work_result['disk_read'] : null,
-                    'disk_write' => isset($work_result['disk_write']) ? $work_result['disk_write'] : null,
-                    'cache_hits' => isset($work_result['cache_hits']) ? $work_result['cache_hits'] : 0,
-                    'cache_misses' => isset($work_result['cache_misses']) ? $work_result['cache_misses'] : 0
+                    'iteration' => $total_completed,
+                    'response_time' => isset($work_result['response_time']) ? floatval($work_result['response_time']) : 0,
+                    'memory_usage' => isset($work_result['memory_usage']) ? intval($work_result['memory_usage']) : 0,
+                    'db_queries' => isset($work_result['db_queries']) ? intval($work_result['db_queries']) : 0,
+                    'cpu_usage' => isset($work_result['cpu_usage']) ? floatval($work_result['cpu_usage']) : 0,
+                    'ram_usage' => isset($work_result['ram_usage']) ? intval($work_result['ram_usage']) : 0,
+                    'disk_read' => isset($work_result['disk_read']) ? floatval($work_result['disk_read']) : 0,
+                    'disk_write' => isset($work_result['disk_write']) ? floatval($work_result['disk_write']) : 0,
+                    'cache_hits' => isset($work_result['cache_hits']) ? intval($work_result['cache_hits']) : 0,
+                    'cache_misses' => isset($work_result['cache_misses']) ? intval($work_result['cache_misses']) : 0
                 ));
             }
             
@@ -266,15 +254,16 @@ class WP_Cache_Benchmark_Engine {
         }
         
         $phases[$phase_index] = $current_phase;
+        $job_config['phases'] = $phases;
+        $job_config['total_completed'] = $total_completed;
         
         if ($current_phase['completed'] >= $current_phase['total']) {
             $this->log($job_id, 'success', $current_phase['label'] . ' completed');
             $job_config['current_phase_index']++;
         }
         
-        $job_config['phases'] = $phases;
-        
-        $total_completed = $this->get_total_completed($phases, count($phases) - 1, 0);
+        $this->query_tracker->stop_tracking();
+        $this->resource_monitor->stop();
         
         $this->log($job_id, 'info', sprintf(
             'Heartbeat: %s - %d/%d (%.1f%%)',
@@ -288,12 +277,11 @@ class WP_Cache_Benchmark_Engine {
             'phase_total' => $current_phase['total']
         ));
         
-        $this->resource_monitor->stop();
-        $this->query_tracker->stop_tracking();
+        $serialized_config = maybe_serialize($job_config);
         
         WP_Cache_Benchmark_Database::update_result($job_id, array(
             'current_iteration' => $total_completed,
-            'job_config' => maybe_serialize($job_config),
+            'job_config' => $serialized_config,
             'last_heartbeat' => current_time('mysql')
         ));
         
@@ -313,15 +301,6 @@ class WP_Cache_Benchmark_Engine {
             'total_completed' => $total_completed,
             'phases_remaining' => count($phases) - $job_config['current_phase_index']
         );
-    }
-    
-    private function get_total_completed($phases, $up_to_phase, $current_completed) {
-        $total = 0;
-        for ($i = 0; $i < $up_to_phase; $i++) {
-            $total += $phases[$i]['completed'];
-        }
-        $total += $current_completed;
-        return $total;
     }
     
     private function do_work($type, $iteration, &$job_config) {
@@ -414,6 +393,12 @@ class WP_Cache_Benchmark_Engine {
     }
     
     private function create_single_post($index) {
+        global $wpdb;
+        
+        $queries_before = $wpdb->num_queries;
+        $memory_before = memory_get_usage(true);
+        $cache_before = $this->get_cache_stats();
+        
         $start_time = microtime(true);
         
         $post_id = wp_insert_post(array(
@@ -424,35 +409,49 @@ class WP_Cache_Benchmark_Engine {
             'post_author' => get_current_user_id() ?: 1
         ));
         
-        $duration = (microtime(true) - $start_time) * 1000;
-        
         if ($post_id && !is_wp_error($post_id)) {
             for ($m = 1; $m <= 5; $m++) {
                 update_post_meta($post_id, 'benchmark_meta_' . $m, wp_generate_uuid4());
             }
-            
-            if ($duration > 500) {
-                $this->log($this->result_id, 'slow', sprintf('Slow post creation #%d: %.2fms', $index, $duration));
-            }
-            
-            return array(
-                'post_id' => $post_id,
-                'response_time' => $duration
-            );
         }
         
-        return array('response_time' => $duration);
+        $duration = (microtime(true) - $start_time) * 1000;
+        $cache_after = $this->get_cache_stats();
+        $resources = $this->resource_monitor->get_current();
+        
+        if ($duration > 500) {
+            $this->log($this->result_id, 'slow', sprintf('Slow post creation #%d: %.2fms', $index, $duration));
+        }
+        
+        return array(
+            'post_id' => ($post_id && !is_wp_error($post_id)) ? $post_id : null,
+            'response_time' => $duration,
+            'memory_usage' => memory_get_usage(true),
+            'db_queries' => $wpdb->num_queries - $queries_before,
+            'cpu_usage' => $resources['cpu'],
+            'ram_usage' => $resources['ram'],
+            'disk_read' => $resources['disk_read'],
+            'disk_write' => $resources['disk_write'],
+            'cache_hits' => max(0, $cache_after['hits'] - $cache_before['hits']),
+            'cache_misses' => max(0, $cache_after['misses'] - $cache_before['misses'])
+        );
     }
     
     private function read_single_api($index) {
+        global $wpdb;
+        
+        $queries_before = $wpdb->num_queries;
+        $memory_before = memory_get_usage(true);
+        $cache_before = $this->get_cache_stats();
+        
+        $start_time = microtime(true);
+        
         $posts = get_posts(array(
             'numberposts' => 10,
             'post_type' => 'post',
             'post_status' => 'publish',
             'offset' => ($index % 10) * 10
         ));
-        
-        $start_time = microtime(true);
         
         foreach ($posts as $post) {
             get_post($post->ID);
@@ -464,15 +463,33 @@ class WP_Cache_Benchmark_Engine {
         }
         
         $duration = (microtime(true) - $start_time) * 1000;
+        $cache_after = $this->get_cache_stats();
+        $resources = $this->resource_monitor->get_current();
         
         if ($duration > 200) {
             $this->log($this->result_id, 'slow', sprintf('Slow API read #%d: %.2fms', $index, $duration));
         }
         
-        return array('response_time' => $duration);
+        return array(
+            'response_time' => $duration,
+            'memory_usage' => memory_get_usage(true),
+            'db_queries' => $wpdb->num_queries - $queries_before,
+            'cpu_usage' => $resources['cpu'],
+            'ram_usage' => $resources['ram'],
+            'disk_read' => $resources['disk_read'],
+            'disk_write' => $resources['disk_write'],
+            'cache_hits' => max(0, $cache_after['hits'] - $cache_before['hits']),
+            'cache_misses' => max(0, $cache_after['misses'] - $cache_before['misses'])
+        );
     }
     
     private function reload_single_option($index) {
+        global $wpdb;
+        
+        $queries_before = $wpdb->num_queries;
+        $memory_before = memory_get_usage(true);
+        $cache_before = $this->get_cache_stats();
+        
         $start_time = microtime(true);
         
         wp_cache_flush();
@@ -485,15 +502,33 @@ class WP_Cache_Benchmark_Engine {
         }
         
         $duration = (microtime(true) - $start_time) * 1000;
+        $cache_after = $this->get_cache_stats();
+        $resources = $this->resource_monitor->get_current();
         
         if ($duration > 50) {
             $this->log($this->result_id, 'slow', sprintf('Slow option reload #%d: %.2fms', $index, $duration));
         }
         
-        return array('response_time' => $duration);
+        return array(
+            'response_time' => $duration,
+            'memory_usage' => memory_get_usage(true),
+            'db_queries' => $wpdb->num_queries - $queries_before,
+            'cpu_usage' => $resources['cpu'],
+            'ram_usage' => $resources['ram'],
+            'disk_read' => $resources['disk_read'],
+            'disk_write' => $resources['disk_write'],
+            'cache_hits' => max(0, $cache_after['hits'] - $cache_before['hits']),
+            'cache_misses' => max(0, $cache_after['misses'] - $cache_before['misses'])
+        );
     }
     
-    private function simulate_single_cron(&$job_config) {
+    private function simulate_single_cron($index, &$job_config) {
+        global $wpdb;
+        
+        $queries_before = $wpdb->num_queries;
+        $memory_before = memory_get_usage(true);
+        $cache_before = $this->get_cache_stats();
+        
         $upload_dir = wp_upload_dir();
         $test_dir = $upload_dir['basedir'] . '/benchmark-test';
         
@@ -508,6 +543,8 @@ class WP_Cache_Benchmark_Engine {
         file_put_contents($file_path, $content);
         
         $duration = (microtime(true) - $start_time) * 1000;
+        $cache_after = $this->get_cache_stats();
+        $resources = $this->resource_monitor->get_current();
         
         if (file_exists($file_path)) {
             unlink($file_path);
@@ -517,7 +554,17 @@ class WP_Cache_Benchmark_Engine {
             $this->log($this->result_id, 'slow', sprintf('Slow file write: %.2fms', $duration));
         }
         
-        return array('response_time' => $duration);
+        return array(
+            'response_time' => $duration,
+            'memory_usage' => memory_get_usage(true),
+            'db_queries' => $wpdb->num_queries - $queries_before,
+            'cpu_usage' => $resources['cpu'],
+            'ram_usage' => $resources['ram'],
+            'disk_read' => $resources['disk_read'],
+            'disk_write' => $resources['disk_write'],
+            'cache_hits' => max(0, $cache_after['hits'] - $cache_before['hits']),
+            'cache_misses' => max(0, $cache_after['misses'] - $cache_before['misses'])
+        );
     }
     
     public function finalize_job($job_id, $final_status = 'completed') {
@@ -527,8 +574,17 @@ class WP_Cache_Benchmark_Engine {
         }
         
         $job_config = maybe_unserialize($result->job_config);
-        if (!$job_config) {
-            return array('status' => 'error', 'message' => 'Invalid job config');
+        if (!$job_config || !is_array($job_config)) {
+            $job_config = array(
+                'response_times' => array(),
+                'memory_usages' => array(),
+                'db_queries' => array(),
+                'cache_hits' => 0,
+                'cache_misses' => 0,
+                'created_post_ids' => array(),
+                'profile_id' => null,
+                'config' => array()
+            );
         }
         
         $this->log($job_id, 'info', 'Finalizing benchmark...');
@@ -540,21 +596,36 @@ class WP_Cache_Benchmark_Engine {
             }
         }
         
-        $response_times = $job_config['response_times'];
-        $memory_usages = $job_config['memory_usages'];
-        $db_queries = $job_config['db_queries'];
-        $cache_hits = $job_config['cache_hits'];
-        $cache_misses = $job_config['cache_misses'];
+        $db_metrics = WP_Cache_Benchmark_Database::get_metrics($job_id);
+        
+        $response_times = array();
+        $memory_usages = array();
+        $db_queries_arr = array();
+        $cache_hits = 0;
+        $cache_misses = 0;
+        
+        foreach ($db_metrics as $metric) {
+            if ($metric->response_time > 0) {
+                $response_times[] = floatval($metric->response_time);
+            }
+            if ($metric->memory_usage > 0) {
+                $memory_usages[] = intval($metric->memory_usage);
+            }
+            if ($metric->db_queries > 0) {
+                $db_queries_arr[] = intval($metric->db_queries);
+            }
+            $cache_hits += intval($metric->cache_hits);
+            $cache_misses += intval($metric->cache_misses);
+        }
         
         $avg_response = count($response_times) > 0 ? array_sum($response_times) / count($response_times) : 0;
         $avg_memory = count($memory_usages) > 0 ? array_sum($memory_usages) / count($memory_usages) : 0;
-        $avg_queries = count($db_queries) > 0 ? array_sum($db_queries) / count($db_queries) : 0;
+        $avg_queries = count($db_queries_arr) > 0 ? array_sum($db_queries_arr) / count($db_queries_arr) : 0;
         
         $total_cache = $cache_hits + $cache_misses;
         $cache_hit_rate = $total_cache > 0 ? ($cache_hits / $total_cache) * 100 : 0;
         
         $query_stats = $this->query_tracker->get_query_stats();
-        $logs = WP_Cache_Benchmark_Database::get_all_logs($job_id);
         
         $report = $this->generate_report($avg_response, $avg_memory, $avg_queries, $cache_hit_rate, count($response_times));
         
@@ -566,7 +637,7 @@ class WP_Cache_Benchmark_Engine {
             'avg_memory_usage' => $avg_memory,
             'peak_memory_usage' => count($memory_usages) > 0 ? max($memory_usages) : 0,
             'avg_db_queries' => $avg_queries,
-            'total_db_queries' => array_sum($db_queries),
+            'total_db_queries' => array_sum($db_queries_arr),
             'cache_hits' => $cache_hits,
             'cache_misses' => $cache_misses,
             'cache_hit_rate' => $cache_hit_rate,
