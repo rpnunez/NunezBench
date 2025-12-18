@@ -83,7 +83,13 @@ class WP_Cache_Benchmark_Ajax_Handler {
         $profile_id = isset($_POST['profile_id']) ? intval($_POST['profile_id']) : 0;
         $duration = isset($_POST['duration']) ? sanitize_text_field($_POST['duration']) : 'quick';
         $name = isset($_POST['name']) ? sanitize_text_field($_POST['name']) : null;
-        $create_posts = isset($_POST['create_posts']) && $_POST['create_posts'] === '1';
+        
+        $test_options = array(
+            'create_posts' => isset($_POST['create_posts']) && $_POST['create_posts'] === '1',
+            'read_api' => isset($_POST['read_api']) && $_POST['read_api'] === '1',
+            'reload_options' => isset($_POST['reload_options']) && $_POST['reload_options'] === '1',
+            'simulate_cron' => isset($_POST['simulate_cron']) && $_POST['simulate_cron'] === '1'
+        );
         
         $valid_durations = array('quick', '2min', '5min', 'until_stop');
         if (!in_array($duration, $valid_durations)) {
@@ -97,7 +103,7 @@ class WP_Cache_Benchmark_Ajax_Handler {
             $profile_id > 0 ? $profile_id : null, 
             $duration, 
             $name,
-            array('create_posts' => $create_posts)
+            $test_options
         );
         
         $result = WP_Cache_Benchmark_Database::get_result($benchmark_result['result_id']);

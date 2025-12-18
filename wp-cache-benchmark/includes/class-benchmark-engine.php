@@ -23,25 +23,37 @@ class WP_Cache_Benchmark_Engine {
             'posts' => 100,
             'iterations' => 10,
             'max_time' => 60,
-            'label' => 'Quick'
+            'label' => 'Quick',
+            'api_reads' => 50,
+            'option_reloads' => 20,
+            'cron_writes' => 5
         ),
         '2min' => array(
             'posts' => 1000,
             'iterations' => 50,
             'max_time' => 120,
-            'label' => '2 Minutes'
+            'label' => '2 Minutes',
+            'api_reads' => 500,
+            'option_reloads' => 100,
+            'cron_writes' => 25
         ),
         '5min' => array(
             'posts' => 2500,
             'iterations' => 100,
             'max_time' => 300,
-            'label' => '5 Minutes'
+            'label' => '5 Minutes',
+            'api_reads' => 1000,
+            'option_reloads' => 200,
+            'cron_writes' => 50
         ),
         'until_stop' => array(
             'posts' => 5000,
             'iterations' => 500,
             'max_time' => 600,
-            'label' => 'Until Stopped (max 10 min)'
+            'label' => 'Until Stopped (max 10 min)',
+            'api_reads' => 2000,
+            'option_reloads' => 500,
+            'cron_writes' => 100
         )
     );
     
@@ -152,6 +164,18 @@ class WP_Cache_Benchmark_Engine {
         
         if (!empty($options['create_posts']) && $config['posts'] > 0) {
             $this->run_post_creation_test($config['posts'], $max_end_time);
+        }
+        
+        if (!empty($options['read_api']) && $config['api_reads'] > 0) {
+            $this->run_api_read_test($config['api_reads'], $max_end_time);
+        }
+        
+        if (!empty($options['reload_options']) && $config['option_reloads'] > 0) {
+            $this->run_option_reload_test($config['option_reloads'], $max_end_time);
+        }
+        
+        if (!empty($options['simulate_cron']) && $config['cron_writes'] > 0) {
+            $this->run_cron_simulation_test($config['cron_writes'], $max_end_time);
         }
         
         $this->resource_monitor->stop();
@@ -375,6 +399,216 @@ class WP_Cache_Benchmark_Engine {
         $cleanup_duration = (microtime(true) - $cleanup_start) * 1000;
         $this->logger->log_phase_end('Cleanup', $cleanup_duration, array(
             'posts_deleted' => count($created_ids)
+        ));
+    }
+    
+    private function run_api_read_test($read_count, $max_end_time) {
+        $this->logger->log_phase_start('API Read Test');
+        $phase_start = microtime(true);
+        
+        $slow_reads = 0;
+        $total_read_time = 0;
+        $successful_reads = 0;
+        
+        $posts = get_posts(array(
+            'numberposts' => min(100, $read_count),
+            'post_type' => 'post',
+            'post_status' => 'publish'
+        ));
+        
+        if (empty($posts)) {
+            $this->logger->log('No posts available for API read test, creating temporary posts', 'warning');
+            $temp_posts = array();
+            for ($i = 0; $i < 10 && time() < $max_end_time && !$this->should_stop; $i++) {
+                $post_id = wp_insert_post(array(
+                    'post_title' => 'Temp API Test Post ' . ($i + 1),
+                    'post_content' => 'Test content for API reading.',
+                    'post_status' => 'publish',
+                    'post_type' => 'post'
+                ));
+                if ($post_id && !is_wp_error($post_id)) {
+                    $temp_posts[] = $post_id;
+                }
+            }
+            $posts = get_posts(array('include' => $temp_posts, 'post_type' => 'post'));
+        }
+        
+        for ($i = 0; $i < $read_count && time() < $max_end_time && !$this->should_stop; $i++) {
+            $post = $posts[$i % count($posts)];
+            
+            $read_start = microtime(true);
+            
+            $post_data = get_post($post->ID);
+            $meta = get_post_meta($post->ID);
+            $author = get_the_author_meta('display_name', $post->post_author);
+            $categories = get_the_category($post->ID);
+            $tags = get_the_tags($post->ID);
+            $comments = get_comments(array('post_id' => $post->ID, 'number' => 5));
+            
+            $duration = (microtime(true) - $read_start) * 1000;
+            $total_read_time += $duration;
+            $successful_reads++;
+            
+            $is_slow = $this->logger->is_slow('query', $duration);
+            if ($is_slow) {
+                $slow_reads++;
+                $this->logger->log(sprintf('[SLOW] API read for post #%d took %.2fms', $post->ID, $duration), 'slow');
+            }
+            
+            if ($i % 25 === 0) {
+                $this->logger->heartbeat($i, $read_count, array(
+                    'reads_completed' => $successful_reads,
+                    'slow_reads' => $slow_reads
+                ));
+            }
+        }
+        
+        if (!empty($temp_posts)) {
+            foreach ($temp_posts as $post_id) {
+                wp_delete_post($post_id, true);
+            }
+        }
+        
+        $phase_duration = (microtime(true) - $phase_start) * 1000;
+        $this->logger->log_phase_end('API Read Test', $phase_duration, array(
+            'reads_completed' => $successful_reads,
+            'slow_reads' => $slow_reads,
+            'avg_read_time' => $successful_reads > 0 ? $total_read_time / $successful_reads : 0
+        ));
+    }
+    
+    private function run_option_reload_test($reload_count, $max_end_time) {
+        $this->logger->log_phase_start('Option Reload Test');
+        $phase_start = microtime(true);
+        
+        $slow_reloads = 0;
+        $total_reload_time = 0;
+        $cache_flushes = 0;
+        
+        $options_to_reload = array(
+            'siteurl', 'blogname', 'blogdescription', 'admin_email', 'posts_per_page',
+            'date_format', 'time_format', 'timezone_string', 'active_plugins', 'template',
+            'stylesheet', 'sidebars_widgets', 'widget_block', 'theme_mods_' . get_option('stylesheet'),
+            'rewrite_rules', 'cron', 'wp_user_roles', 'users_can_register', 'show_on_front'
+        );
+        
+        for ($i = 0; $i < $reload_count && time() < $max_end_time && !$this->should_stop; $i++) {
+            $reload_start = microtime(true);
+            
+            wp_cache_delete('alloptions', 'options');
+            $cache_flushes++;
+            
+            foreach ($options_to_reload as $option_name) {
+                wp_cache_delete($option_name, 'options');
+                get_option($option_name);
+            }
+            
+            $duration = (microtime(true) - $reload_start) * 1000;
+            $total_reload_time += $duration;
+            
+            $is_slow = $this->logger->is_slow('query', $duration);
+            if ($is_slow) {
+                $slow_reloads++;
+                $this->logger->log(sprintf('[SLOW] Option reload cycle #%d took %.2fms', $i + 1, $duration), 'slow');
+            }
+            
+            if ($i % 10 === 0) {
+                $this->logger->heartbeat($i, $reload_count, array(
+                    'reloads_completed' => $i + 1,
+                    'cache_flushes' => $cache_flushes,
+                    'slow_reloads' => $slow_reloads
+                ));
+            }
+            
+            usleep(10000);
+        }
+        
+        $phase_duration = (microtime(true) - $phase_start) * 1000;
+        $this->logger->log_phase_end('Option Reload Test', $phase_duration, array(
+            'reloads_completed' => $reload_count,
+            'cache_flushes' => $cache_flushes,
+            'slow_reloads' => $slow_reloads,
+            'avg_reload_time' => $reload_count > 0 ? $total_reload_time / $reload_count : 0
+        ));
+    }
+    
+    private function run_cron_simulation_test($write_count, $max_end_time) {
+        $this->logger->log_phase_start('Cron Simulation Test');
+        $phase_start = microtime(true);
+        
+        $slow_writes = 0;
+        $total_write_time = 0;
+        $total_bytes_written = 0;
+        $files_created = array();
+        
+        $upload_dir = wp_upload_dir();
+        $test_dir = $upload_dir['basedir'] . '/benchmark-cron-test';
+        
+        if (!file_exists($test_dir)) {
+            wp_mkdir_p($test_dir);
+        }
+        
+        $file_size = 1024 * 1024;
+        $random_content = str_repeat(wp_generate_uuid4(), $file_size / 36 + 1);
+        $random_content = substr($random_content, 0, $file_size);
+        
+        for ($i = 0; $i < $write_count && time() < $max_end_time && !$this->should_stop; $i++) {
+            $write_start = microtime(true);
+            
+            $filename = $test_dir . '/cron-test-' . $i . '-' . time() . '.tmp';
+            
+            $bytes_written = file_put_contents($filename, $random_content);
+            
+            if ($bytes_written !== false) {
+                $files_created[] = $filename;
+                $total_bytes_written += $bytes_written;
+            }
+            
+            $duration = (microtime(true) - $write_start) * 1000;
+            $total_write_time += $duration;
+            
+            $is_slow = $duration > 100;
+            if ($is_slow) {
+                $slow_writes++;
+                $this->logger->log(sprintf('[SLOW] Cron file write #%d took %.2fms (1MB)', $i + 1, $duration), 'slow');
+            }
+            
+            if ($i % 5 === 0) {
+                $this->logger->heartbeat($i, $write_count, array(
+                    'files_written' => count($files_created),
+                    'bytes_written' => size_format($total_bytes_written),
+                    'slow_writes' => $slow_writes
+                ));
+            }
+        }
+        
+        $this->logger->log_phase_start('Cron Cleanup');
+        $cleanup_start = microtime(true);
+        
+        foreach ($files_created as $file) {
+            if (file_exists($file)) {
+                unlink($file);
+            }
+        }
+        
+        if (file_exists($test_dir) && is_dir($test_dir)) {
+            $remaining_files = glob($test_dir . '/*');
+            if (empty($remaining_files)) {
+                rmdir($test_dir);
+            }
+        }
+        
+        $cleanup_duration = (microtime(true) - $cleanup_start) * 1000;
+        $this->logger->log_phase_end('Cron Cleanup', $cleanup_duration, array(
+            'files_deleted' => count($files_created)
+        ));
+        
+        $phase_duration = (microtime(true) - $phase_start) * 1000;
+        $this->logger->log_phase_end('Cron Simulation Test', $phase_duration, array(
+            'files_written' => count($files_created),
+            'total_bytes' => size_format($total_bytes_written),
+            'slow_writes' => $slow_writes,
+            'avg_write_time' => count($files_created) > 0 ? $total_write_time / count($files_created) : 0
         ));
     }
     
